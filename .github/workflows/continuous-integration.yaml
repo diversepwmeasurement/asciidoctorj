@@ -1,135 +1,146 @@
-name: Build Main
-on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'docs/**'
-  pull_request:
-    branches:
-      - main
-    paths-ignore:
-      - 'docs/**'
-  schedule:
-    - cron: '0 0 * * *'
-
 jobs:
   build:
     name: Build
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 1
+    - continue-on-error: true
+      uses: actions/setup-java@v3
+      with:
+        distribution: ${{ matrix.distribution }}
+        java-version: ${{ matrix.java }}
+    - continue-on-error: true
+      name: Build
+      run: './gradlew -S -Pskip.signing assemble
+
+        unset GEM_PATH GEM_HOME JRUBY_OPTS
+
+        ./gradlew -S -Pskip.signing check
+
+        '
     strategy:
       fail-fast: false
-      max-parallel: 6
       matrix:
-        java:
-          - '11'
-          - '17'
-          - '21'
         distribution:
-          - 'temurin'
+        - temurin
+        java:
+        - '11'
+        - '17'
+        - '21'
         os:
-          - ubuntu-latest
-          - macos-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
-      - uses: actions/setup-java@v3
-        with:
-          distribution: ${{ matrix.distribution }}
-          java-version: ${{ matrix.java }}
-      - name: Build
-        run: |
-          ./gradlew -S -Pskip.signing assemble
-          unset GEM_PATH GEM_HOME JRUBY_OPTS
-          ./gradlew -S -Pskip.signing check
+        - ubuntu-latest
+        - macos-latest
+      max-parallel: 6
   build-windows:
     name: Build on Windows
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 1
+    - continue-on-error: true
+      uses: actions/setup-java@v3
+      with:
+        distribution: ${{ matrix.distribution }}
+        java-version: ${{ matrix.java }}
+    - continue-on-error: true
+      name: Assemble
+      run: 'gradlew.bat -i assemble
+
+        '
+      shell: cmd
+    - continue-on-error: true
+      name: Check
+      run: 'gradlew.bat -i -S check
+
+        '
+      shell: cmd
+    - continue-on-error: true
+      env:
+        java_version: ${{ matrix.java }}
+        os_name: ${{ matrix.os }}
+      if: always()
+      name: Upload asciidoctorj-core reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: asciidoctorj-core-reports-${{ env.os_name }}-${{ env.java_version }}
+        path: asciidoctorj-core/build/reports/*
+    - continue-on-error: true
+      env:
+        java_version: ${{ matrix.java }}
+        os_name: ${{ matrix.os }}
+      if: always()
+      name: Upload asciidoctorj-documentation reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: asciidoctorj-documentation-reports-${{ env.os_name }}-${{ env.java_version
+          }}
+        path: asciidoctorj-documentation/build/reports/*
     strategy:
       fail-fast: false
-      max-parallel: 3
       matrix:
-        java:
-          - '11'
-          - '17'
-          - '21'
         distribution:
-          - 'temurin'
+        - temurin
+        java:
+        - '11'
+        - '17'
+        - '21'
         os:
-          - windows-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
-      - uses: actions/setup-java@v3
-        with:
-          distribution: ${{ matrix.distribution }}
-          java-version: ${{ matrix.java }}
-      - name: Assemble
-        shell: cmd
-        run: |
-          gradlew.bat -i assemble
-      - name: Check
-        shell: cmd
-        run: |
-          gradlew.bat -i -S check
-      - name: Upload asciidoctorj-core reports
-        uses: actions/upload-artifact@v3
-        env:
-          os_name: ${{ matrix.os }}
-          java_version: ${{ matrix.java }}
-        if: always()
-        with:
-          name: asciidoctorj-core-reports-${{ env.os_name }}-${{ env.java_version }}
-          path: asciidoctorj-core/build/reports/*
-      - name: Upload asciidoctorj-documentation reports
-        uses: actions/upload-artifact@v3
-        if: always()
-        env:
-          os_name: ${{ matrix.os }}
-          java_version: ${{ matrix.java }}
-        with:
-          name: asciidoctorj-documentation-reports-${{ env.os_name }}-${{ env.java_version }}
-          path: asciidoctorj-documentation/build/reports/*
+        - windows-latest
+      max-parallel: 3
   test-asciidoctor-upstream:
     name: Test Asciidoctor Upstream
     needs:
-      - build
-      - build-windows
+    - build
+    - build-windows
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 1
+    - continue-on-error: true
+      name: Setup Java
+      uses: s4u/setup-maven-action@v1.7.0
+      with:
+        java-distribution: temurin
+        java-version: ${{ matrix.java }}
+        maven-version: ${{ matrix.maven }}
+    - continue-on-error: true
+      name: Upstream Build
+      run: 'unset GEM_PATH GEM_HOME JRUBY_OPTS
+
+        ./ci/test-asciidoctor-upstream.sh
+
+        '
+    - continue-on-error: true
+      env:
+        java_version: ${{ matrix.java }}
+        os_name: ${{ matrix.os }}
+      if: always()
+      name: Upload asciidoctorj-core reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: asciidoctorj-core-reports-upstream-${{ env.os_name }}-${{ env.java_version
+          }}
+        path: asciidoctorj-core/build/reports/*
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         java:
-          - '11'
-          - '17'
-          - '21'
-        os:
-          - ubuntu-latest
+        - '11'
+        - '17'
+        - '21'
         maven:
-          - '3.9.4'
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
-      - name: Setup Java
-        uses: s4u/setup-maven-action@v1.7.0
-        with:
-          java-distribution: temurin
-          java-version: ${{ matrix.java }}
-          maven-version: ${{ matrix.maven }}
-      - name: Upstream Build
-        run: |
-          unset GEM_PATH GEM_HOME JRUBY_OPTS
-          ./ci/test-asciidoctor-upstream.sh
-      - name: Upload asciidoctorj-core reports
-        uses: actions/upload-artifact@v3
-        if: always()
-        env:
-          os_name: ${{ matrix.os }}
-          java_version: ${{ matrix.java }}
-        with:
-          name: asciidoctorj-core-reports-upstream-${{ env.os_name }}-${{ env.java_version }}
-          path: asciidoctorj-core/build/reports/*
+        - 3.9.4
+        os:
+        - ubuntu-latest
+      max-parallel: 2
+name: Build Main
+on:
+  repository_dispatch:
+    types: trigger-ga___continuous-integration.yaml
